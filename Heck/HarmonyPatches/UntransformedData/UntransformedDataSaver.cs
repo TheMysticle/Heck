@@ -53,14 +53,16 @@ public class HeckGameplayCoreSceneSetupData : GameplayCoreSceneSetupData
             original._allowNullBeatmapLevelData,
             original._beatmapLevelsModel,
             original.beatmapLevelData,
-#elif !PRE_V1_40_8
+#else
             original._allowNullBeatmapLevelData,
+    #if !PRE_V1_40_8
             original.environmentsListModel,
+    #endif
 #endif
             original.recordingToolData)
     {
         GameplayCoreSceneSetupData @this = this;
-        _beatmapLevelsModelAccessor(ref @this) = original._beatmapLevelsModel!;
+        _beatmapLevelsModelAccessor(ref @this) = original._beatmapLevelsModel;
         beatmapLevelData = original.beatmapLevelData;
     }
 
