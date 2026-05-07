@@ -347,4 +347,24 @@ internal class NoteJumpNoodlifier : IAffinity, IDisposable
                 new CodeInstruction(OpCodes.Stfld, _localPositionField))
             .InstructionEnumeration();
     }
+
+#if !PRE_V1_40_8
+    // in post-1.40.8 versions, the note will stop interpolating _startPos and _endPos after _missedMarkReported is true
+    // this is a problem for noodle specifically because this is where noodle sets the note position
+    [AffinityPrefix]
+    [AffinityPatch(typeof(NoteJump), nameof(NoteJump.ManualUpdate))]
+    private void ContinuousInterpolation(NoteJump __instance)
+    {
+        if (!__instance._missedMarkReported)
+        {
+            return;
+        }
+
+        // in a perfect world, we would cache these values from _variableMovementDataProvider from before the miss
+        // but for noodle, its good enough to just keep relying on those values
+        // this may cause some odd behavior with variable njs from v4 however
+        __instance._startPos = __instance._variableMovementDataProvider.moveEndPosition + __instance._startOffset;
+        __instance._endPos = __instance._variableMovementDataProvider.jumpEndPosition + __instance._endOffset;
+    }
+#endif
 }
