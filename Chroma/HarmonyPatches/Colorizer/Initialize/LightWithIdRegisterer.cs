@@ -14,6 +14,16 @@ internal class LightWithIdRegisterer : IAffinity
     private readonly Dictionary<ILightWithId, int> _requestedIds = new();
     private readonly LightIDTableManager _tableManager;
 
+#if !PRE_V1_45_1
+    // As of 1.45.1, LightWithIdManager no longer has a flat "_lights"/"_colors" array to bind to by name
+    // (Harmony's "____fieldname" convention) -- its internal storage moved to a groupId/elementId-based
+    // mapping. Since the patches below already fully replace the game's own RegisterLight/UnregisterLight/
+    // SetColorForId (__runOriginal = false), they never needed to mirror the game's internal layout in the
+    // first place -- Chroma just owns this state itself now, keyed the same way (by lightId, 0-550).
+    private readonly List<ILightWithId>?[] _lights = new List<ILightWithId>?[LightWithIdManager.kMaxLightId + 1];
+    private readonly Color?[] _colors = new Color?[LightWithIdManager.kMaxLightId + 1];
+#endif
+
     private LightWithIdRegisterer(
         LightColorizerManager colorizerManager,
         LightWithIdManager lightWithIdManager,
@@ -24,10 +34,30 @@ internal class LightWithIdRegisterer : IAffinity
         _tableManager = tableManager;
     }
 
+#if !PRE_V1_45_1
+    // Used by LightColorizer's constructor instead of reaching into the (now nonexistent) private
+    // "_lights" field directly.
+    internal List<ILightWithId> GetOrCreateLights(int lightId)
+    {
+        List<ILightWithId>? lights = _lights[lightId];
+        if (lights == null)
+        {
+            lights = new List<ILightWithId>(10);
+            _lights[lightId] = lights;
+        }
+
+        return lights;
+    }
+#endif
+
     internal void ForceUnregister(ILightWithId lightWithId)
     {
         int lightId = lightWithId.lightId;
+#if !PRE_V1_45_1
+        List<ILightWithId> lights = _lights[lightId]!;
+#else
         List<ILightWithId> lights = _lightWithIdManager._lights[lightId];
+#endif
         int index = lights.FindIndex(n => n == lightWithId);
         lights[index] = null!; // TODO: handle null
         _tableManager.UnregisterIndex(lightId, index);
@@ -50,6 +80,26 @@ internal class LightWithIdRegisterer : IAffinity
     // too lazy to make a transpiler
     [AffinityPrefix]
     [AffinityPatch(typeof(LightWithIdManager), nameof(LightWithIdManager.SetColorForId))]
+#if !PRE_V1_45_1
+    private bool AllowNull(
+        int lightId,
+        Color color,
+        ref bool ____didChangeSomeColorsThisFrame)
+    {
+        _colors[lightId] = color;
+        ____didChangeSomeColorsThisFrame = true;
+        _lights[lightId]
+            ?.ForEach(
+                n =>
+                {
+                    if (n is { isRegistered: true })
+                    {
+                        n.ColorWasSet(color);
+                    }
+                });
+        return false;
+    }
+#else
     private bool AllowNull(
         int lightId,
         Color color,
@@ -70,6 +120,7 @@ internal class LightWithIdRegisterer : IAffinity
                 });
         return false;
     }
+#endif
 
     [AffinityPrefix]
     [AffinityPatch(typeof(LightWithIdManager), nameof(LightWithIdManager.UnregisterLight))]
@@ -84,10 +135,14 @@ internal class LightWithIdRegisterer : IAffinity
     private void Prefix(
         ref bool __runOriginal,
         LightWithIdManager __instance,
-        ILightWithId lightWithId,
+        ILightWithId lightWithId
+#if PRE_V1_45_1
+        ,
         List<ILightWithId>?[] ____lights,
         List<ILightWithId> ____lightsToUnregister,
-        Color?[] ____colors)
+        Color?[] ____colors
+#endif
+    )
     {
         // TODO: figure this shit out
         // for some reason, despite being an affinity patch bound to player, this still runs in the menu scene
@@ -110,11 +165,15 @@ internal class LightWithIdRegisterer : IAffinity
             return;
         }
 
+#if !PRE_V1_45_1
+        List<ILightWithId> lights = GetOrCreateLights(lightId);
+#else
         List<ILightWithId>? lights = ____lights[lightId];
         if (lights == null)
         {
             ____lights[lightId] = lights = new List<ILightWithId>(10);
         }
+#endif
 
         lightWithId.__SetIsRegistered();
 
@@ -137,8 +196,12 @@ internal class LightWithIdRegisterer : IAffinity
             n => n.ChromaLightSwitchEventEffect.RegisterLight(lightWithId, index));
 
         lights.Add(lightWithId);
+#if !PRE_V1_45_1
+        Color? color = _colors[lightId];
+#else
         ____lightsToUnregister.Remove(lightWithId);
         Color? color = ____colors[lightId];
+#endif
         lightWithId.ColorWasSet(color ?? Color.clear);
     }
 }

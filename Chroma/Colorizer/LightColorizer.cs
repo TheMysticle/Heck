@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Chroma.HarmonyPatches.Colorizer.Initialize;
 using Chroma.Lighting;
 using IPA.Utilities;
 using JetBrains.Annotations;
@@ -179,7 +180,11 @@ public class LightColorizer
         ChromaLightSwitchEventEffect chromaLightSwitchEventEffect,
         LightColorizerManager colorizerManager,
         LightWithIdManager lightManager,
-        LightIDTableManager tableManager)
+        LightIDTableManager tableManager
+#if !PRE_V1_45_1
+        , LightWithIdRegisterer lightWithIdRegisterer
+#endif
+    )
     {
         ChromaLightSwitchEventEffect = chromaLightSwitchEventEffect;
         _colorizerManager = colorizerManager;
@@ -193,6 +198,11 @@ public class LightColorizer
         Initialize(lightSwitchEventEffect._lightColor0Boost, 2);
         Initialize(lightSwitchEventEffect._lightColor1Boost, 3);
 
+#if !PRE_V1_45_1
+        // LightWithIdManager no longer exposes a "_lights" field to reach into directly as of 1.45.1 (see
+        // the comment on LightWithIdRegisterer) -- go through the tracker Chroma now maintains itself.
+        Lights = lightWithIdRegisterer.GetOrCreateLights(lightSwitchEventEffect.lightsId);
+#else
         List<ILightWithId>? lights = lightManager._lights[lightSwitchEventEffect.lightsId];
 
         // possible uninitialized
@@ -203,6 +213,7 @@ public class LightColorizer
         }
 
         Lights = lights;
+#endif
         return;
 
         void Initialize(ColorSO colorSO, int index)

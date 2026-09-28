@@ -46,7 +46,13 @@ internal class LightIDTableManager
         _log = log;
         _config = config;
         _environmentOverrideChecker = environmentOverrideChecker;
+#if !PRE_V1_45_1
+        // EnvironmentSceneSetupData no longer carries an EnvironmentInfoSO as of 1.45.1 -- it stores the
+        // serialized name directly.
+        string environmentName = environmentSceneSetupData.environmentSerializedName;
+#else
         string environmentName = environmentSceneSetupData.environmentInfo.serializedName;
+#endif
         Dictionary<int, Dictionary<int, int>> loadedTable;
         if (_lightIDTable.TryGetValue(environmentName, out Dictionary<int, Dictionary<int, int>> selectedTable))
         {
