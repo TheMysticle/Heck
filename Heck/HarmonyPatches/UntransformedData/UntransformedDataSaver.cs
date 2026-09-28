@@ -107,27 +107,37 @@ public class HeckGameplayCoreSceneSetupData : GameplayCoreSceneSetupData
     // transforms in one shot via LoadTransformedBeatmapDataAsync, which internally calls into
     // BeatmapDataTransformHelper.CreateTransformedBeatmapData(Async) to do the actual transform. Neither
     // of those receives the setup-data instance, so we bridge them: a prefix on
-    // LoadTransformedBeatmapDataAsync records which Hecked instance is about to load, and a prefix on
-    // CreateTransformedBeatmapData (which CreateTransformedBeatmapDataAsync wraps via Task.Run) captures
-    // its raw beatmapData for that instance. Both patches only ever fire for the single active gameplay
-    // scene setup, matching the single-instance-at-a-time assumption this class already made.
-    private static HeckGameplayCoreSceneSetupData? _pendingCapture;
+    // LoadTransformedBeatmapDataAsync records which Hecked instance is about to load, keyed by its
+    // beatmapKey, and a prefix on CreateTransformedBeatmapData (which CreateTransformedBeatmapDataAsync
+    // wraps via Task.Run, so potentially on a different thread) captures its raw beatmapData for the
+    // matching entry.
+    //
+    // This used to key by a single static "pending" instance instead of by beatmapKey, on the
+    // assumption that only one load is ever in flight at a time -- confirmed wrong on real hardware:
+    // loading a second song crashed with "[_untransformedBeatmapData] was null", because some other
+    // load (a menu-level preview, a non-Hecked vanilla GameplayCoreSceneSetupData, or just the next
+    // song's own load starting before the previous one's transform callback fired) overwrote or cleared
+    // the single pending slot before the real capture happened. Keying by beatmapKey instead means each
+    // load's capture is independent of whatever else happens to be loading at the same time.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<BeatmapKey, HeckGameplayCoreSceneSetupData> _pendingCaptures = new();
 
     [HarmonyPrefix]
     [HarmonyPatch(typeof(GameplayCoreSceneSetupData), nameof(GameplayCoreSceneSetupData.LoadTransformedBeatmapDataAsync))]
     private static void MarkPendingCapture(GameplayCoreSceneSetupData __instance)
     {
-        _pendingCapture = __instance as HeckGameplayCoreSceneSetupData;
+        if (__instance is HeckGameplayCoreSceneSetupData hecked)
+        {
+            _pendingCaptures[hecked.beatmapKey] = hecked;
+        }
     }
 
     [HarmonyPrefix]
     [HarmonyPatch(typeof(BeatmapDataTransformHelper), nameof(BeatmapDataTransformHelper.CreateTransformedBeatmapData))]
-    private static void CaptureUntransformedBeatmapData(IReadonlyBeatmapData beatmapData)
+    private static void CaptureUntransformedBeatmapData(IReadonlyBeatmapData beatmapData, BeatmapKey beatmapKey)
     {
-        if (_pendingCapture != null)
+        if (_pendingCaptures.TryRemove(beatmapKey, out HeckGameplayCoreSceneSetupData? hecked))
         {
-            _pendingCapture._untransformedBeatmapData = beatmapData;
-            _pendingCapture = null;
+            hecked._untransformedBeatmapData = beatmapData;
         }
     }
 #endif

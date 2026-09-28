@@ -78,8 +78,17 @@ internal class LightWithIdRegisterer : IAffinity
     }
 
     // too lazy to make a transpiler
+    // As of 1.45.1, LightWithIdManager has a second SetColorForId(int, int, Color) overload for the
+    // new groupId/elementId lights, so the (int, Color) target must be disambiguated explicitly --
+    // without argumentTypes this throws AmbiguousMatchException at patch-apply time (confirmed on
+    // real hardware: it aborted this whole patch, and coloring silently fell back to unpatched
+    // vanilla behavior for every light using the old lightId path).
     [AffinityPrefix]
+#if !PRE_V1_45_1
+    [AffinityPatch(typeof(LightWithIdManager), nameof(LightWithIdManager.SetColorForId), AffinityMethodType.Normal, new[] { typeof(int), typeof(Color) })]
+#else
     [AffinityPatch(typeof(LightWithIdManager), nameof(LightWithIdManager.SetColorForId))]
+#endif
 #if !PRE_V1_45_1
     private bool AllowNull(
         int lightId,
