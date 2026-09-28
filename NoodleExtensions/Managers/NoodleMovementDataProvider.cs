@@ -176,7 +176,7 @@ internal class NoodleMovementDataProvider : IVariableMovementDataProvider
     [UsedImplicitly]
     internal class Pool : MemoryPool<BeatmapObjectData, NoodleMovementDataProvider>
     {
-        protected override void Reinitialize(
+        public override void Reinitialize(
             BeatmapObjectData beatmapObjectData,
             NoodleMovementDataProvider noodleMovementDataProvider)
         {
