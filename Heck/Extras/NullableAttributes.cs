@@ -9,7 +9,7 @@ namespace System.Diagnostics.CodeAnalysis;
 /// </summary>
 [PublicAPI]
 [AttributeUsage(AttributeTargets.Parameter)]
-public sealed class NotNullWhenAttribute : Attribute
+internal sealed class NotNullWhenAttribute : Attribute
 {
     /// <summary>
     ///     Initializes a new instance of the <see cref="NotNullWhenAttribute" /> class with the specified return value
@@ -32,7 +32,7 @@ public sealed class NotNullWhenAttribute : Attribute
 [AttributeUsage(
     AttributeTargets.Parameter | AttributeTargets.Property | AttributeTargets.ReturnValue,
     AllowMultiple = true)]
-public sealed class NotNullIfNotNullAttribute : Attribute
+internal sealed class NotNullIfNotNullAttribute : Attribute
 {
     /// <summary>
     ///     Initializes a new instance of the <see cref="NotNullIfNotNullAttribute" /> class with the associated parameter

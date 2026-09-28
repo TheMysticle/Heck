@@ -42,9 +42,9 @@ internal class StandardModuleActivator : IInitializable
     [HarmonyTargetMethods]
     private static IEnumerable<MethodBase> TargetMethods()
     {
-        return typeof(StandardLevelScenesTransitionSetupDataSO)
+        return typeof(StandardLevelScenesTransitionSetupData)
             .GetMethods()
-            .Where(n => n.Name == nameof(StandardLevelScenesTransitionSetupDataSO.Init));
+            .Where(n => n.Name == nameof(StandardLevelScenesTransitionSetupData.Init));
     }
 }
 #endif

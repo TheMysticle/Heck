@@ -52,14 +52,14 @@ public class HeckGameplayCoreSceneSetupData : GameplayCoreSceneSetupData
             original.environmentsListModel,
             original._allowNullBeatmapLevelData,
             original._beatmapLevelsModel,
-            original.beatmapLevelData,
+            original.beatmapLevelData)
 #else
             original._allowNullBeatmapLevelData,
     #if !PRE_V1_40_8
             original.environmentsListModel,
     #endif
-#endif
             original.recordingToolData)
+#endif
     {
         GameplayCoreSceneSetupData @this = this;
         _beatmapLevelsModelAccessor(ref @this) = original._beatmapLevelsModel;
@@ -77,7 +77,7 @@ public class HeckGameplayCoreSceneSetupData : GameplayCoreSceneSetupData
 
     // i hate gettype i hate gettype i hate gettype
     [HarmonyTranspiler]
-    [HarmonyPatch(typeof(ScenesTransitionSetupDataSO), nameof(ScenesTransitionSetupDataSO.InstallBindings))]
+    [HarmonyPatch(typeof(ScenesTransitionSetupData), nameof(ScenesTransitionSetupData.InstallBindings))]
     private static IEnumerable<CodeInstruction> HeckOff(IEnumerable<CodeInstruction> instructions)
     {
         return new CodeMatcher(instructions)
@@ -90,6 +90,7 @@ public class HeckGameplayCoreSceneSetupData : GameplayCoreSceneSetupData
             .InstructionEnumeration();
     }
 
+#if !LATEST
     [HarmonyPrefix]
     [HarmonyPatch(typeof(GameplayCoreSceneSetupData), nameof(TransformBeatmapData))]
     private static void OverrideGetTransformedBeatmapDataAsync(
@@ -101,5 +102,34 @@ public class HeckGameplayCoreSceneSetupData : GameplayCoreSceneSetupData
             hecked._untransformedBeatmapData = beatmapData;
         }
     }
+#else
+    // TransformBeatmapData no longer exists as of 1.45.1 -- GameplayCoreSceneSetupData now loads and
+    // transforms in one shot via LoadTransformedBeatmapDataAsync, which internally calls into
+    // BeatmapDataTransformHelper.CreateTransformedBeatmapData(Async) to do the actual transform. Neither
+    // of those receives the setup-data instance, so we bridge them: a prefix on
+    // LoadTransformedBeatmapDataAsync records which Hecked instance is about to load, and a prefix on
+    // CreateTransformedBeatmapData (which CreateTransformedBeatmapDataAsync wraps via Task.Run) captures
+    // its raw beatmapData for that instance. Both patches only ever fire for the single active gameplay
+    // scene setup, matching the single-instance-at-a-time assumption this class already made.
+    private static HeckGameplayCoreSceneSetupData? _pendingCapture;
+
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(GameplayCoreSceneSetupData), nameof(GameplayCoreSceneSetupData.LoadTransformedBeatmapDataAsync))]
+    private static void MarkPendingCapture(GameplayCoreSceneSetupData __instance)
+    {
+        _pendingCapture = __instance as HeckGameplayCoreSceneSetupData;
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(BeatmapDataTransformHelper), nameof(BeatmapDataTransformHelper.CreateTransformedBeatmapData))]
+    private static void CaptureUntransformedBeatmapData(IReadonlyBeatmapData beatmapData)
+    {
+        if (_pendingCapture != null)
+        {
+            _pendingCapture._untransformedBeatmapData = beatmapData;
+            _pendingCapture = null;
+        }
+    }
+#endif
 }
 #endif
